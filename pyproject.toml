@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "trainleak"
+version = "0.1.0"
+description = "Does your model leak its training data? Membership inference audits in one line."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Nancy Patel" }]
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.22", "scipy>=1.8", "scikit-learn>=1.1"]
+keywords = ["privacy", "membership-inference", "machine-learning", "audit", "lira", "differential-privacy"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Security",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.5"]
+dev = ["pytest>=7", "ruff>=0.5", "matplotlib>=3.5"]
+
+[project.scripts]
+trainleak = "trainleak.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/nancypatel12/trainleak"
+Issues = "https://github.com/nancypatel12/trainleak/issues"
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/trainleak/report.py" = ["E501"]
+"benchmarks/*" = ["E402"]
