@@ -1,0 +1,26 @@
+name: Bug report
+description: Something is broken or gives a wrong result
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest code snippet that shows the problem.
+      render: python
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      placeholder: "trainleak 0.1.0, Python 3.12, scikit-learn 1.5, macOS 15"
+    validations:
+      required: true
