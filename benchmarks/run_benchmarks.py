@@ -32,9 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def datasets():
     yield "digits", *load_digits(return_X_y=True)
     yield "breast_cancer", *load_breast_cancer(return_X_y=True)
-    X, y = make_classification(
-        n_samples=3000, n_features=40, n_informative=8, n_classes=4, flip_y=0.05, random_state=0
-    )
+    X, y = make_classification(n_samples=3000, n_features=40, n_informative=8, n_classes=4, flip_y=0.05, random_state=0)
     yield "synthetic-4class", X, y
 
 
@@ -42,11 +40,15 @@ def models():
     yield "LogReg (C=0.05)", lambda: make_pipeline(StandardScaler(), LogisticRegression(C=0.05, max_iter=3000))
     yield "RandomForest", lambda: RandomForestClassifier(n_estimators=100, random_state=0)
     yield "GradBoost", lambda: GradientBoostingClassifier(random_state=0)
-    yield "MLP (no reg.)", lambda: make_pipeline(
-        StandardScaler(), MLPClassifier((256, 256), alpha=0.0, max_iter=500, random_state=0)
+    yield (
+        "MLP (no reg.)",
+        lambda: make_pipeline(StandardScaler(), MLPClassifier((256, 256), alpha=0.0, max_iter=500, random_state=0)),
     )
-    yield "MLP (L2 + early stop)", lambda: make_pipeline(
-        StandardScaler(), MLPClassifier((256, 256), alpha=1.0, early_stopping=True, random_state=0)
+    yield (
+        "MLP (L2 + early stop)",
+        lambda: make_pipeline(
+            StandardScaler(), MLPClassifier((256, 256), alpha=1.0, early_stopping=True, random_state=0)
+        ),
     )
 
 

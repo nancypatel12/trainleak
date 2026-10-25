@@ -9,5 +9,5 @@
 ## Checklist
 
 - [ ] `pytest` passes
-- [ ] `ruff check .` passes
+- [ ] `ruff check .` and `ruff format --check .` pass
 - [ ] README updated (if the public API changed)

@@ -18,6 +18,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest            # all tests should pass in a few seconds
 ruff check .      # lint
+ruff format .     # format
 ```
 
 ## Pull request checklist
@@ -25,7 +26,7 @@ ruff check .      # lint
 1. Branch from `main`: `git checkout -b feat/short-description`.
 2. Keep each PR to one change. Small PRs are reviewed faster.
 3. Add or update tests. New attacks need a test showing they beat chance on an overfit model.
-4. `pytest` and `ruff check .` pass locally (CI runs both on Python 3.9 to 3.13).
+4. `pytest`, `ruff check .` and `ruff format --check .` pass locally (CI runs them on Python 3.9 to 3.14).
 5. Update `README.md` if you change the public API or add an attack.
 6. Fill in the PR template and link the issue (`Closes #12`).
 
