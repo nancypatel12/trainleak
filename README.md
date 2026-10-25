@@ -156,7 +156,7 @@ Strongest of five attacks, 16 LiRA reference models, 50/50 splits. Reproduce wit
 
 The audit set is balanced, so chance is exactly AUC 0.5. Risk comes from the strongest attack: **severe** at AUC ≥ 0.80 or TPR@1%FPR ≥ 20%, **high** at 0.65 / 5%, **moderate** at 0.55 / 2%, else **low**. Conservative heuristics, not guarantees.
 
-## Limitations
+## Limits
 
 - A low score means these attacks failed, not that the model is private. Only differential privacy gives worst-case guarantees.
 - LiRA retrains your model `n_reference` times. Cheap for classical ML; for large networks, lower it or skip it.
