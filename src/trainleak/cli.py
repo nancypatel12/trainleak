@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import time
+from pathlib import Path
 
 from . import __version__, audit
 
@@ -31,7 +32,8 @@ def demo(args: argparse.Namespace) -> None:
         print(f"[{label}]  ({time.time() - start:.1f}s)")
         print(report.summary(), "\n")
         if args.html:
-            path = args.html.replace(".html", f"-{i}.html") if len(models) > 1 else args.html
+            base = Path(args.html)
+            path = str(base.with_name(f"{base.stem}-{i}{base.suffix or '.html'}"))
             report.to_html(path)
             print(f"  HTML report: {path}\n")
 
