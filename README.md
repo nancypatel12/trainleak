@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 
-`trainleak` attacks your trained classifier the way an adversary would and tells you how easily they can tell *who was in your training set*. Accuracy metrics don't measure this.
+`trainleak` attacks your trained classifier the way an adversary would and tells you how well they can spot *who was in your training set*. Accuracy metrics don't measure this.
 
 ```python
 from trainleak import audit
@@ -35,13 +35,12 @@ trainleak audit: RandomForestClassifier
 
 Two models, same data, same train/test gap (2.7% vs 2.8%). One leaks far more:
 
-![ROC curves on log-log axes for a regularized logistic regression and a random forest](docs/roc.png)
+![LiRA ROC curves on log-log axes: the random forest rises far above chance, the logistic regression stays close to it](docs/roc.png)
 
-The gap does not predict leakage. Only an attack does.
+LiRA on the digits dataset. The further a curve rises above the dashed line, the more the model leaks. The gap does not predict leakage. Only an attack does.
 
 - **One call.** Any scikit-learn classifier out of the box; PyTorch, JAX, XGBoost or anything else with a few lines.
 - **Strong attacks.** [LiRA](https://arxiv.org/abs/2112.03570) (Carlini et al., 2022), plus loss, confidence, entropy and modified entropy.
-- **TPR at low FPR.** Not just AUC. Confidently exposing 1% of your users is a leak, even at AUC 0.51.
 - **Light.** NumPy, SciPy, scikit-learn. CPU only. A full audit takes seconds.
 - **Shareable.** Terminal summary, JSON for CI, standalone HTML report.
 
@@ -116,9 +115,9 @@ report = audit(model, X_train, y_train, X_test, y_test)
 assert report.risk in ("low", "moderate"), report.summary()
 ```
 
-## Benchmarks
+## Results
 
-Strongest of five attacks, 16 LiRA reference models, 50/50 splits. Reproduce with `python benchmarks/run_benchmarks.py` (about a minute on a laptop).
+Strongest of five attacks, 16 LiRA reference models, 50/50 splits, one seed. Reproduce with `python benchmarks/run_benchmarks.py` (2 minutes on an M3 Pro CPU). Numbers: [`benchmarks/results.json`](benchmarks/results.json).
 
 | dataset | model | test acc | train-test gap | best attack | AUC | TPR@0.1%FPR | TPR@1%FPR | risk |
 |---|---|---|---|---|---|---|---|---|
@@ -138,7 +137,7 @@ Strongest of five attacks, 16 LiRA reference models, 50/50 splits. Reproduce wit
 | synthetic-4class | MLP (no reg.) | 0.686 | +0.314 | lira | 0.897 | 0.110 | 0.391 | **severe** |
 | synthetic-4class | MLP (L2 + early stop) | 0.685 | +0.187 | lira | 0.753 | 0.058 | 0.145 | **high** |
 
-1. **LiRA wins almost everywhere**, often 5–10× stronger than the loss attack at low FPR. Threshold-only audits underestimate risk.
+1. **LiRA wins almost everywhere.** At 1% FPR it finds at least 10× more members than the loss attack in 9 of 15 cases; in 3, the loss attack finds none. Threshold-only audits underestimate risk.
 2. **Regularization is a privacy control.** L2 and early stopping take the digits MLP from *high* to *low* for 3.6 points of accuracy.
 3. **Mediocre models can still leak everything.** The synthetic random forest scores 73% test accuracy, yet LiRA finds 97% of its training points at 0.1% FPR.
 
@@ -154,12 +153,22 @@ Strongest of five attacks, 16 LiRA reference models, 50/50 splits. Reproduce wit
 | `modified_entropy` | Entropy that penalizes confident *wrong* predictions (Song & Mittal, 2021) | free |
 | `lira` | Train *N* reference models on random halves, fit per-example Gaussians to logit-scaled confidence IN vs OUT, score by likelihood ratio (Carlini et al., 2022) | *N* fits |
 
-The audit set is balanced, so chance is exactly AUC 0.5. Risk comes from the strongest attack: **severe** at AUC ≥ 0.80 or TPR@1%FPR ≥ 20%, **high** at 0.65 / 5%, **moderate** at 0.55 / 2%, else **low**. Conservative heuristics, not guarantees.
+The audit set is balanced, so chance is exactly AUC 0.5. Risk is the worst grade any attack earns: **severe** at AUC ≥ 0.80 or TPR@1%FPR ≥ 20%, **high** at 0.65 / 5%, **moderate** at 0.55 / 2%, else **low**. Conservative heuristics, not guarantees.
+
+## Decisions
+
+- **TPR at low FPR, not just AUC.** Confidently exposing 1% of your users is a leak, even at AUC 0.51 (Carlini et al., 2022).
+- **A balanced audit set.** Equal members and non-members, so chance is exactly AUC 0.5 and advantage means something.
+- **Online LiRA with one global variance.** With 16 reference models, per-example variances are noisy; the paper recommends a fixed variance in that regime.
+- **The worst attack sets the risk.** One attack that works is enough to leak.
+- **No deep learning dependency.** PyTorch, JAX and others plug in through `predict_proba` and `model_factory`, so the core stays NumPy, SciPy and scikit-learn.
 
 ## Limits
 
 - A low score means these attacks failed, not that the model is private. Only differential privacy gives worst-case guarantees.
+- LiRA's reference models train on half the audit pool (up to 2,000 rows by default), not your full training set. On large datasets, raise `max_samples` so they behave more like your model.
 - LiRA retrains your model `n_reference` times. Cheap for classical ML; for large networks, lower it or skip it.
+- Benchmarks use one seed, so small differences may be noise.
 - Classifiers only, for now. Regression and generative models are on the roadmap.
 
 ## Contributing
