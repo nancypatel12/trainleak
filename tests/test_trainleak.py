@@ -104,6 +104,17 @@ def test_float32_probabilities_keep_lira_working(data):
     assert report.results["lira"].auc > 0.6
 
 
+def test_lira_ignores_how_labels_are_named(data):
+    X_tr, X_te, y_tr, y_te = data
+    aucs = []
+    for names in (np.array([0, 1]), np.array([-1, 1]), np.array(["cat", "dog"])):
+        model = DecisionTreeClassifier(random_state=0).fit(X_tr, names[y_tr])
+        report = audit(model, X_tr, names[y_tr], X_te, names[y_te], attacks=["lira"], n_reference=8)
+        aucs.append(report.results["lira"].auc)
+    assert aucs[0] > 0.6
+    assert np.allclose(aucs, aucs[0])
+
+
 def test_string_labels_and_unknown_attack(data):
     X_tr, X_te, y_tr, y_te = data
     names = np.array(["cat", "dog"])
