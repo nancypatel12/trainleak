@@ -8,6 +8,8 @@
     "auc": 0.615,
     "tpr@0.1%": 0.008,
     "tpr@1%": 0.033,
+    "loss_tpr@0.1%": 0.0,
+    "loss_tpr@1%": 0.001,
     "risk": "moderate",
     "seconds": 0.1
   },
@@ -20,8 +22,10 @@
     "auc": 0.849,
     "tpr@0.1%": 0.008,
     "tpr@1%": 0.039,
+    "loss_tpr@0.1%": 0.0,
+    "loss_tpr@1%": 0.0,
     "risk": "severe",
-    "seconds": 1.7
+    "seconds": 1.8
   },
   {
     "dataset": "digits",
@@ -32,6 +36,8 @@
     "auc": 0.796,
     "tpr@0.1%": 0.079,
     "tpr@1%": 0.186,
+    "loss_tpr@0.1%": 0.0,
+    "loss_tpr@1%": 0.012,
     "risk": "high",
     "seconds": 36.3
   },
@@ -44,8 +50,10 @@
     "auc": 0.657,
     "tpr@0.1%": 0.047,
     "tpr@1%": 0.081,
+    "loss_tpr@0.1%": 0.0,
+    "loss_tpr@1%": 0.004,
     "risk": "high",
-    "seconds": 4.7
+    "seconds": 5.1
   },
   {
     "dataset": "digits",
@@ -56,8 +64,10 @@
     "auc": 0.538,
     "tpr@0.1%": 0.0,
     "tpr@1%": 0.016,
+    "loss_tpr@0.1%": 0.0,
+    "loss_tpr@1%": 0.008,
     "risk": "low",
-    "seconds": 2.1
+    "seconds": 2.2
   },
   {
     "dataset": "breast_cancer",
@@ -68,6 +78,8 @@
     "auc": 0.514,
     "tpr@0.1%": 0.004,
     "tpr@1%": 0.021,
+    "loss_tpr@0.1%": 0.004,
+    "loss_tpr@1%": 0.021,
     "risk": "moderate",
     "seconds": 0.0
   },
@@ -80,6 +92,8 @@
     "auc": 0.662,
     "tpr@0.1%": 0.004,
     "tpr@1%": 0.035,
+    "loss_tpr@0.1%": 0.0,
+    "loss_tpr@1%": 0.0,
     "risk": "high",
     "seconds": 0.9
   },
@@ -92,8 +106,10 @@
     "auc": 0.621,
     "tpr@0.1%": 0.014,
     "tpr@1%": 0.081,
+    "loss_tpr@0.1%": 0.0,
+    "loss_tpr@1%": 0.004,
     "risk": "high",
-    "seconds": 1.7
+    "seconds": 1.8
   },
   {
     "dataset": "breast_cancer",
@@ -104,6 +120,8 @@
     "auc": 0.567,
     "tpr@0.1%": 0.014,
     "tpr@1%": 0.025,
+    "loss_tpr@0.1%": 0.0,
+    "loss_tpr@1%": 0.0,
     "risk": "moderate",
     "seconds": 2.2
   },
@@ -116,6 +134,8 @@
     "auc": 0.515,
     "tpr@0.1%": 0.007,
     "tpr@1%": 0.018,
+    "loss_tpr@0.1%": 0.007,
+    "loss_tpr@1%": 0.011,
     "risk": "low",
     "seconds": 0.6
   },
@@ -128,6 +148,8 @@
     "auc": 0.545,
     "tpr@0.1%": 0.009,
     "tpr@1%": 0.019,
+    "loss_tpr@0.1%": 0.002,
+    "loss_tpr@1%": 0.007,
     "risk": "low",
     "seconds": 0.1
   },
@@ -140,8 +162,10 @@
     "auc": 1.0,
     "tpr@0.1%": 0.971,
     "tpr@1%": 0.989,
+    "loss_tpr@0.1%": 0.035,
+    "loss_tpr@1%": 0.261,
     "risk": "severe",
-    "seconds": 5.4
+    "seconds": 5.5
   },
   {
     "dataset": "synthetic-4class",
@@ -152,8 +176,10 @@
     "auc": 0.852,
     "tpr@0.1%": 0.088,
     "tpr@1%": 0.237,
+    "loss_tpr@0.1%": 0.0,
+    "loss_tpr@1%": 0.01,
     "risk": "severe",
-    "seconds": 53.8
+    "seconds": 55.1
   },
   {
     "dataset": "synthetic-4class",
@@ -164,8 +190,10 @@
     "auc": 0.897,
     "tpr@0.1%": 0.11,
     "tpr@1%": 0.391,
+    "loss_tpr@0.1%": 0.001,
+    "loss_tpr@1%": 0.011,
     "risk": "severe",
-    "seconds": 12.2
+    "seconds": 12.0
   },
   {
     "dataset": "synthetic-4class",
@@ -176,7 +204,9 @@
     "auc": 0.753,
     "tpr@0.1%": 0.058,
     "tpr@1%": 0.145,
+    "loss_tpr@0.1%": 0.003,
+    "loss_tpr@1%": 0.015,
     "risk": "high",
-    "seconds": 3.5
+    "seconds": 3.6
   }
 ]
