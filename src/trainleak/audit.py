@@ -176,11 +176,17 @@ def audit(
 
     classes = np.unique(np.concatenate([y_train, y_test]))
     raw_proba = predict_proba or _sklearn_proba(classes)
+    # LiRA trains reference models on encoded labels 0..k-1, not on the
+    # original ones, so their columns align to those codes.
+    raw_ref_proba = predict_proba or _sklearn_proba(np.arange(len(classes)))
 
     # float32 outputs (PyTorch, JAX) round 1 - 1e-12 to 1.0, which turns
     # clipped logs into -inf and silently breaks LiRA.
     def proba(m, X):
         return np.asarray(raw_proba(m, X), dtype=np.float64)
+
+    def ref_proba(m, X):
+        return np.asarray(raw_ref_proba(m, X), dtype=np.float64)
 
     enc_train = np.searchsorted(classes, y_train)
     enc_test = np.searchsorted(classes, y_test)
@@ -222,7 +228,7 @@ def audit(
 
             scores = lira_scores(
                 factory,
-                proba,
+                ref_proba,
                 X,
                 y,
                 true_class_prob(probs, y),
