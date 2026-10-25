@@ -1,12 +1,12 @@
 # trainleak
 
-**Does your model leak its training data? Find out in one line.**
+**Does your model leak its training data?**
 
 [![CI](https://github.com/nancypatel12/trainleak/actions/workflows/ci.yml/badge.svg)](https://github.com/nancypatel12/trainleak/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 
-`trainleak` attacks your trained classifier the way an adversary would and tells you how easily they can tell *who was in your training set*. Accuracy metrics will not warn you. This will.
+`trainleak` attacks your trained classifier the way an adversary would and tells you how easily they can tell *who was in your training set*. Accuracy metrics don't measure this.
 
 ```python
 from trainleak import audit
@@ -41,7 +41,7 @@ The gap does not predict leakage. Only an attack does.
 
 - **One call.** Any scikit-learn classifier out of the box; PyTorch, JAX, XGBoost or anything else with a few lines.
 - **Strong attacks.** [LiRA](https://arxiv.org/abs/2112.03570) (Carlini et al., 2022), plus loss, confidence, entropy and modified entropy.
-- **The right metric.** TPR at low FPR, not just AUC. Confidently exposing 1% of your users is a leak, even at AUC 0.51.
+- **TPR at low FPR.** Not just AUC. Confidently exposing 1% of your users is a leak, even at AUC 0.51.
 - **Light.** NumPy, SciPy, scikit-learn. CPU only. A full audit takes seconds.
 - **Shareable.** Terminal summary, JSON for CI, standalone HTML report.
 
