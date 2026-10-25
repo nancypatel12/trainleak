@@ -96,7 +96,11 @@ def test_float32_probabilities_keep_lira_working(data):
     X_tr, X_te, y_tr, y_te = data
     model = DecisionTreeClassifier(random_state=0).fit(X_tr, y_tr)
     report = audit(
-        model, X_tr, y_tr, X_te, y_te,
+        model,
+        X_tr,
+        y_tr,
+        X_te,
+        y_te,
         predict_proba=lambda m, X: m.predict_proba(X).astype(np.float32),
         model_factory=lambda: DecisionTreeClassifier(random_state=0),
         n_reference=8,

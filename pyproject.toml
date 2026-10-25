@@ -34,8 +34,12 @@ Issues = "https://github.com/nancypatel12/trainleak/issues"
 line-length = 120
 target-version = "py39"
 
+[tool.ruff.format]
+# READMEs align comments in code blocks, which the formatter would undo.
+exclude = ["*.md"]
+
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "I", "B", "UP", "SIM", "NPY", "PD", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/trainleak/report.py" = ["E501"]

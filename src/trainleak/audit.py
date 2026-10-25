@@ -202,9 +202,7 @@ def audit(
 
     probs = proba(model, X)
     if probs.shape != (len(X), len(classes)):
-        raise ValueError(
-            f"predict_proba returned shape {probs.shape}, expected {(len(X), len(classes))}"
-        )
+        raise ValueError(f"predict_proba returned shape {probs.shape}, expected {(len(X), len(classes))}")
     preds = probs.argmax(axis=1)
     train_acc = float((preds[is_member == 1] == y[is_member == 1]).mean())
     test_acc = float((preds[is_member == 0] == y[is_member == 0]).mean())

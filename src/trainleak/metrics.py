@@ -42,9 +42,7 @@ class AttackResult:
         }
 
 
-def evaluate_attack(
-    name: str, scores: np.ndarray, is_member: np.ndarray, fprs=DEFAULT_FPRS
-) -> AttackResult:
+def evaluate_attack(name: str, scores: np.ndarray, is_member: np.ndarray, fprs=DEFAULT_FPRS) -> AttackResult:
     """Score an attack on a balanced set of members and non-members."""
     scores = np.nan_to_num(scores, nan=0.0, posinf=1e12, neginf=-1e12)
     fpr, tpr, _ = roc_curve(is_member, scores)
