@@ -4,16 +4,25 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trainleak"
-version = "0.1.0"
+version = "0.2.0"
 description = "Does your model leak its training data? Membership inference audits in one line."
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "Nancy Patel" }]
 requires-python = ">=3.9"
 dependencies = ["numpy>=1.22", "scipy>=1.8", "scikit-learn>=1.1"]
-keywords = ["privacy", "membership-inference", "machine-learning", "audit", "lira", "differential-privacy"]
+keywords = ["privacy", "membership-inference", "machine-learning", "audit", "lira", "scikit-learn"]
 classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Intended Audience :: Developers",
   "Intended Audience :: Science/Research",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Topic :: Security",

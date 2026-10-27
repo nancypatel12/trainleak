@@ -20,7 +20,7 @@ Examples of unacceptable behavior:
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the maintainer by opening a private security advisory on this repository or by contacting them through https://nancypatel.me. All complaints will be reviewed and investigated promptly and fairly. Maintainers may remove, edit, or reject comments, commits, code, issues, and other contributions that are not aligned with this Code of Conduct, and may ban contributors who repeatedly violate it.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the maintainer privately, using "Report a vulnerability" on this repository's Security tab. All complaints will be reviewed and investigated promptly and fairly. Maintainers may remove, edit, or reject comments, commits, code, issues, and other contributions that are not aligned with this Code of Conduct, and may ban contributors who repeatedly violate it.
 
 ## Attribution
 

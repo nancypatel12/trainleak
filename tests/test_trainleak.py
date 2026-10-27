@@ -1,4 +1,5 @@
 import json
+import sys
 
 import numpy as np
 import pytest
@@ -208,3 +209,41 @@ def test_custom_predict_for_regression(regression_data):
     )
     assert report.results["loss"].auc > 0.6
     assert report.results["lira"].auc > 0.6
+
+
+def test_column_vector_targets_match_flat_targets(data, regression_data):
+    # A one-column frame (df[["y"]]) gives (n, 1) targets.
+    X_tr, X_te, y_tr, y_te = data
+    model = DecisionTreeClassifier(random_state=0).fit(X_tr, y_tr)
+    flat = audit(model, X_tr, y_tr, X_te, y_te, attacks=["loss"])
+    col = audit(model, X_tr, y_tr.reshape(-1, 1), X_te, y_te.reshape(-1, 1), attacks=["loss"])
+    assert col.results["loss"].auc == flat.results["loss"].auc
+
+    X_tr, X_te, y_tr, y_te = regression_data
+    model = DecisionTreeRegressor(random_state=0).fit(X_tr, y_tr)
+    flat = audit(model, X_tr, y_tr, X_te, y_te, task="regression", attacks=["loss"])
+    col = audit(model, X_tr, y_tr.reshape(-1, 1), X_te, y_te.reshape(-1, 1), task="regression", attacks=["loss"])
+    assert col.train_mse == flat.train_mse and col.results["loss"].auc == flat.results["loss"].auc
+
+    with pytest.raises(ValueError, match="one target per row"):
+        audit(model, X_tr, np.c_[y_tr, y_tr], X_te, np.c_[y_te, y_te], task="regression")
+
+
+def test_html_without_matplotlib_says_how_to_install(data, tmp_path, monkeypatch):
+    X_tr, X_te, y_tr, y_te = data
+    model = DecisionTreeClassifier(random_state=0).fit(X_tr, y_tr)
+    report = audit(model, X_tr, y_tr, X_te, y_te, attacks=["loss"])
+    monkeypatch.setitem(sys.modules, "matplotlib", None)  # makes `import matplotlib` fail
+    with pytest.raises(ImportError, match=r"trainleak\[plot\]"):
+        report.to_html(str(tmp_path / "r.html"))
+
+
+def test_regression_lira_ignores_target_units(regression_data):
+    # Before residuals were scaled, tiny units hid this tree's leak (TPR@1% 0.005 vs 1.0).
+    X_tr, X_te, y_tr, y_te = regression_data
+    tprs = []
+    for unit in (1e-5, 1.0):
+        model = DecisionTreeRegressor(random_state=0).fit(X_tr, y_tr * unit)
+        r = audit(model, X_tr, y_tr * unit, X_te, y_te * unit, task="regression", attacks=["lira"], n_reference=8)
+        tprs.append(r.results["lira"].tpr_at[0.01])
+    assert tprs[0] == pytest.approx(tprs[1]) and tprs[0] > 0.5

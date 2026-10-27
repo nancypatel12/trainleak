@@ -8,6 +8,8 @@
 
 ## Checklist
 
+- [ ] I understand every line of this change and can explain it
+- [ ] I wrote this description and any comments in my own words
 - [ ] `pytest` passes
 - [ ] `ruff check .` and `ruff format --check .` pass
 - [ ] README updated (if the public API changed)

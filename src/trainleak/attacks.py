@@ -106,10 +106,15 @@ def regression_statistic(predict: PredictFn) -> StatisticFn:
     Reference models fit their own rows tightly, so IN residuals sit in a
     narrower band around zero than OUT residuals. The likelihood ratio
     scores how much better the target model's residual fits the IN band.
+
+    Residuals are divided by the spread of ``y``, so the result does not
+    depend on the target's units. Otherwise LiRA's fixed floor on the
+    standard deviation swamps targets on a small scale.
     """
 
     def fn(model, X, y):
-        return y - predict(model, X)
+        scale = y.std() or 1.0
+        return (y - predict(model, X)) / scale
 
     return fn
 

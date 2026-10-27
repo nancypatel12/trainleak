@@ -3,14 +3,51 @@
 **Does your model leak its training data?**
 
 [![CI](https://github.com/nancypatel12/trainleak/actions/workflows/ci.yml/badge.svg)](https://github.com/nancypatel12/trainleak/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 
-`trainleak` attacks your trained classifier the way an adversary would and tells you how well they can spot *who was in your training set*. Accuracy metrics don't measure this.
+trainleak is an open-source Python library that checks whether a trained machine learning model leaks its training data.
+
+Models can memorize the rows they were trained on. When they do, anyone who can query the model can often tell whether a specific person's record was used: a patient in a hospital's dataset, a customer in a bank's. This is called membership inference, and it's the standard way to measure leakage. trainleak runs the strongest published membership inference attacks against your model before you release it, and grades the risk from low to severe. Other kinds of leakage are on the [roadmap](#roadmap).
+
+It works with scikit-learn models as is, and with PyTorch, JAX or any other framework through a small wrapper. It needs only NumPy, SciPy and scikit-learn, and runs on a CPU.
+
+## Quickstart
+
+### 1. Install
+
+Python 3.9 or later.
+
+```bash
+pip install git+https://github.com/nancypatel12/trainleak
+```
+
+To also write HTML reports, install the `plot` extra instead (adds matplotlib):
+
+```bash
+pip install "trainleak[plot] @ git+https://github.com/nancypatel12/trainleak"
+```
+
+### 2. Run the demo
+
+```bash
+trainleak demo
+```
+
+The demo trains two models on scikit-learn's digits dataset, an overfit random forest and a regularized logistic regression, and audits both. It takes about 3 seconds on an M3 Pro.
+
+### 3. Audit your own model
+
+`audit` needs three things: the trained model, the data it was trained on, and data from the same source that it never saw. A held-out test split works.
 
 ```python
+from sklearn.datasets import load_digits
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
 from trainleak import audit
 
+X, y = load_digits(return_X_y=True)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=0, stratify=y)
+
+model = RandomForestClassifier(random_state=0).fit(X_train, y_train)
 report = audit(model, X_train, y_train, X_test, y_test)
 print(report.summary())
 ```
@@ -31,53 +68,72 @@ trainleak audit: RandomForestClassifier
   The model is memorizing its training set. Do not release it if the training data is sensitive.
 ```
 
-## Why
+### 4. Read the report
 
-Two models, same data, same train/test gap (2.7% vs 2.8%). One leaks far more:
+Rows the model trained on are "members". Rows it never saw are "non-members". Each attack tries to tell them apart.
 
-![LiRA ROC curves on log-log axes: the random forest rises far above chance, the logistic regression stays close to it](docs/roc.png)
+| Field | Meaning |
+|---|---|
+| `risk` | The verdict: low, moderate, high or severe. Set by the strongest attack. |
+| `AUC` | How well an attack separates members from non-members. 0.5 is a coin flip, 1.0 is perfect. |
+| `TPR@1%` | The share of members an attack finds while wrongly flagging only 1% of non-members. The closest number to "how many real people are exposed." `TPR@0.1%` and `TPR@10%` are the same at stricter and looser cutoffs. |
+| `adv` | Attack advantage: the largest gap between true-positive and false-positive rate. 0 means no better than guessing. |
 
-LiRA on the digits dataset. The further a curve rises above the dashed line, the more the model leaks. The gap does not predict leakage. Only an attack does.
-
-- **One call.** Any scikit-learn classifier out of the box; PyTorch, JAX, XGBoost or anything else with a few lines.
-- **Strong attacks.** [LiRA](https://arxiv.org/abs/2112.03570) (Carlini et al., 2022), plus loss, confidence, entropy and modified entropy.
-- **Light.** NumPy, SciPy, scikit-learn. CPU only. A full audit takes seconds.
-- **Shareable.** Terminal summary, JSON for CI, standalone HTML report.
-
-## Install
-
-```bash
-pip install git+https://github.com/nancypatel12/trainleak
-pip install "trainleak[plot] @ git+https://github.com/nancypatel12/trainleak"   # HTML reports
-```
-
-No code needed to try it:
-
-```bash
-trainleak demo --html report.html
-```
+A low risk means these attacks failed, not that the model is private. See [Limitations](#limitations).
 
 ## Usage
 
-### scikit-learn
+### Arguments
+
+Everything after the five data arguments is optional.
+
+| Argument | What to pass |
+|---|---|
+| `model` | A fitted model. Classifiers need `predict_proba`, regressors need `predict`. |
+| `X_train`, `y_train` | The rows the model was trained on. |
+| `X_test`, `y_test` | Rows from the same source that the model never saw. |
+| `task` | `"classification"` (default) or `"regression"`. |
+| `attacks` | Which attacks to run, e.g. `["loss", "lira"]`. Defaults to every attack that applies to the task. |
+| `n_reference` | How many reference models LiRA trains (default 16). More is slower but more reliable. |
+| `model_factory` | A function that returns a fresh, unfitted model. LiRA needs it for models scikit-learn can't copy. |
+| `predict_proba`, `predict` | `fn(model, X)` to use in place of the model's own methods. |
+| `max_samples` | The most rows used from each side (default 2,000). |
+| `seed` | Random seed (default 0). |
+
+### Regression models
+
+Models that predict a number, such as a price or a dose, leak too: their errors are smaller on rows they trained on. Pass `task="regression"`. The report shows mean squared error in place of accuracy and runs the two attacks that apply, `loss` and `lira`.
 
 ```python
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.datasets import make_regression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
 from trainleak import audit
 
-model = GradientBoostingClassifier().fit(X_train, y_train)
-report = audit(model, X_train, y_train, X_test, y_test)
+X, y = make_regression(n_samples=800, n_features=20, n_informative=5, noise=10.0, random_state=0)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=0)
 
-report.risk                     # "low" | "moderate" | "high" | "severe"
-report.strongest.tpr_at[0.01]   # TPR at 1% FPR, strongest attack
-report.most_vulnerable(10)      # the 10 most exposed training rows
-report.to_html("audit.html")
-report.to_json("audit.json")
+model = RandomForestRegressor(random_state=0).fit(X_train, y_train)
+report = audit(model, X_train, y_train, X_test, y_test, task="regression")
+print(report.summary())
 ```
 
-### PyTorch, or any framework
+```
+trainleak audit: RandomForestRegressor
+  members / non-members : 400 / 400
+  train mse / test mse  : 118.4 / 1128  (gap +1009)
 
-Wrap your model in `fit` and `predict_proba`. LiRA uses `model_factory` to train fresh copies; omit it to run only the fast attacks.
+  attack                AUC    adv  TPR@0.1%   TPR@1%  TPR@10%
+  loss                0.789  0.460     0.018    0.062    0.360
+  lira                0.881  0.625     0.142    0.170    0.510
+
+  risk: SEVERE  (strongest attack: lira)
+  The model is memorizing its training set. Do not release it if the training data is sensitive.
+```
+
+### PyTorch and other frameworks
+
+Wrap your model in a class with `fit(X, y)` and `predict_proba(X)`. LiRA calls `model_factory` to train fresh copies. Without it, LiRA is skipped with a warning and the other attacks still run. This example uses the digits data from the Quickstart.
 
 ```python
 import torch
@@ -106,73 +162,30 @@ model = make().fit(X_train, y_train)
 report = audit(model, X_train, y_train, X_test, y_test, model_factory=make, n_reference=8)
 ```
 
-Already have a trained network you can't wrap? Pass `predict_proba=lambda model, X: ...` instead.
+If you can't wrap the model, pass `predict_proba=lambda model, X: ...` for a classifier or `predict=lambda model, X: ...` for a regressor.
 
-### Regression
-
-Regressors leak too: members get smaller residuals. Pass `task="regression"` and trainleak runs the loss attack on squared error and LiRA on per-example residuals, and reports train/test MSE in place of accuracy.
+### Work with the results
 
 ```python
-from sklearn.ensemble import RandomForestRegressor
-from trainleak import audit
-
-model = RandomForestRegressor().fit(X_train, y_train)
-report = audit(model, X_train, y_train, X_test, y_test, task="regression")
-print(report.summary())
+report.risk                     # "low" | "moderate" | "high" | "severe"
+report.strongest.tpr_at[0.01]   # TPR@1% of the strongest attack
+report.most_vulnerable(10)      # indices into X_train of the 10 most exposed rows
+report.to_json("audit.json")    # every number, for scripts and CI
+report.to_html("audit.html")    # a standalone page with ROC curves (needs the plot extra)
 ```
 
-```
-trainleak audit: RandomForestRegressor
-  members / non-members : 400 / 400
-  train mse / test mse  : 127.3 / 1124  (gap +996.6)
-
-  attack                AUC    adv  TPR@0.1%   TPR@1%  TPR@10%
-  loss                0.784  0.453     0.000    0.030    0.338
-  lira                0.849  0.568     0.092    0.150    0.502
-
-  risk: SEVERE  (strongest attack: lira)
-```
-
-Anything with `predict` works; for other frameworks pass `predict=lambda model, X: ...`.
-
-### Gate releases in CI
+### Fail a CI build when a model leaks
 
 ```python
 report = audit(model, X_train, y_train, X_test, y_test)
 assert report.risk in ("low", "moderate"), report.summary()
 ```
 
-## Results
-
-Strongest of five attacks, 16 LiRA reference models, 50/50 splits, one seed. Reproduce with `python benchmarks/run_benchmarks.py` (2 minutes on an M3 Pro CPU). Numbers: [`benchmarks/results.json`](benchmarks/results.json).
-
-| dataset | model | test acc | train-test gap | best attack | AUC | TPR@0.1%FPR | TPR@1%FPR | risk |
-|---|---|---|---|---|---|---|---|---|
-| digits | LogReg (C=0.05) | 0.952 | +0.028 | lira | 0.615 | 0.008 | 0.033 | **moderate** |
-| digits | RandomForest | 0.973 | +0.027 | lira | 0.849 | 0.008 | 0.039 | **severe** |
-| digits | GradBoost | 0.949 | +0.051 | lira | 0.796 | 0.079 | 0.186 | **high** |
-| digits | MLP (no reg.) | 0.973 | +0.027 | lira | 0.657 | 0.047 | 0.081 | **high** |
-| digits | MLP (L2 + early stop) | 0.937 | +0.040 | lira | 0.538 | 0.000 | 0.016 | **low** |
-| breast_cancer | LogReg (C=0.05) | 0.968 | +0.011 | entropy | 0.514 | 0.004 | 0.021 | **moderate** |
-| breast_cancer | RandomForest | 0.947 | +0.053 | lira | 0.662 | 0.004 | 0.035 | **high** |
-| breast_cancer | GradBoost | 0.947 | +0.053 | lira | 0.621 | 0.014 | 0.081 | **high** |
-| breast_cancer | MLP (no reg.) | 0.982 | +0.018 | lira | 0.567 | 0.014 | 0.025 | **moderate** |
-| breast_cancer | MLP (L2 + early stop) | 0.933 | +0.007 | lira | 0.515 | 0.007 | 0.018 | **low** |
-| synthetic-4class | LogReg (C=0.05) | 0.653 | +0.010 | lira | 0.545 | 0.009 | 0.019 | **low** |
-| synthetic-4class | RandomForest | 0.729 | +0.271 | lira | 1.000 | 0.971 | 0.989 | **severe** |
-| synthetic-4class | GradBoost | 0.739 | +0.206 | lira | 0.852 | 0.088 | 0.237 | **severe** |
-| synthetic-4class | MLP (no reg.) | 0.686 | +0.314 | lira | 0.897 | 0.110 | 0.391 | **severe** |
-| synthetic-4class | MLP (L2 + early stop) | 0.685 | +0.187 | lira | 0.753 | 0.058 | 0.145 | **high** |
-
-1. **LiRA wins almost everywhere.** At 1% FPR it finds at least 10× more members than the loss attack in 9 of 15 cases; in 3, the loss attack finds none. Threshold-only audits underestimate risk.
-2. **Regularization is a privacy control.** L2 and early stopping take the digits MLP from *high* to *low* for 3.6 points of accuracy.
-3. **Mediocre models can still leak everything.** The synthetic random forest scores 73% test accuracy, yet LiRA finds 97% of its training points at 0.1% FPR.
-
-> breast_cancer has only 284 members, so TPR@0.1% is noisy (0.004 is one example). Read TPR@1% there.
-
 ## How it works
 
-| attack | idea | cost |
+Every attack asks the same question about each row: does the model treat it like something it has already seen? The simple attacks read one number from the model's output. LiRA goes further: it trains copies of your model with and without each row, learns what "seen" and "unseen" look like for that row, and compares your model against both.
+
+| Attack | Idea | Cost |
 |---|---|---|
 | `loss` | Members have lower loss (Yeom et al., 2018) | free |
 | `confidence` | Members get higher confidence on their true label | free |
@@ -180,11 +193,29 @@ Strongest of five attacks, 16 LiRA reference models, 50/50 splits, one seed. Rep
 | `modified_entropy` | Entropy that penalizes confident *wrong* predictions (Song & Mittal, 2021) | free |
 | `lira` | Train *N* reference models on random halves, fit per-example Gaussians to logit-scaled confidence IN vs OUT, score by likelihood ratio (Carlini et al., 2022) | *N* fits |
 
-For regression (`task="regression"`), `loss` is negative squared error and `lira` fits its Gaussians to the signed residual `y - prediction` instead of logit-scaled confidence. Entropy and confidence attacks need class probabilities and do not apply.
+For regression, `loss` is negative squared error and `lira` fits its Gaussians to the signed residual `y - prediction`. The entropy and confidence attacks need class probabilities, so they don't apply.
 
-The audit set is balanced, so chance is exactly AUC 0.5. Risk is the worst grade any attack earns: **severe** at AUC ≥ 0.80 or TPR@1%FPR ≥ 20%, **high** at 0.65 / 5%, **moderate** at 0.55 / 2%, else **low**. Conservative heuristics, not guarantees.
+The audit set is balanced, so chance is exactly AUC 0.5. Risk is the worst grade any attack earns: **severe** at AUC ≥ 0.80 or TPR@1% ≥ 20%, **high** at 0.65 / 5%, **moderate** at 0.55 / 2%, else **low**. These thresholds are conservative heuristics, not guarantees.
 
-## Decisions
+## Benchmarks
+
+The benchmarks audit five classifiers on three datasets: 15 models, 16 LiRA reference models each, 50/50 splits, one seed. Three findings stand out. The table shows the rows behind each one.
+
+| Finding | Dataset | Model | Test acc | TPR@1%, LiRA | TPR@1%, loss | Risk |
+|---|---|---|---|---|---|---|
+| 1 | digits | GradBoost | 0.949 | 0.186 | 0.012 | **high** |
+| 1 | synthetic-4class | MLP (no reg.) | 0.686 | 0.391 | 0.011 | **severe** |
+| 2 | digits | MLP (no reg.) | 0.973 | 0.081 | 0.004 | **high** |
+| 2 | digits | MLP (L2 + early stop) | 0.937 | 0.016 | 0.008 | **low** |
+| 3 | synthetic-4class | RandomForest | 0.729 | 0.989 | 0.261 | **severe** |
+
+1. **Simple attacks underestimate risk.** At 1% FPR, LiRA finds at least 10× more members than the loss attack in 9 of the 15 models. In 3 of them, the loss attack finds none.
+2. **Regularization is a privacy control.** L2 and early stopping take the digits MLP from *high* to *low* risk for 3.6 points of accuracy.
+3. **Accuracy doesn't reveal leakage.** The synthetic random forest scores only 73% on test data, yet LiRA finds 99% of its training rows while flagging just 1% of unseen ones.
+
+All 15 results: [`benchmarks/results.md`](benchmarks/results.md). Reproduce them with `python benchmarks/run_benchmarks.py` (2 minutes on an M3 Pro CPU).
+
+## Design decisions
 
 - **TPR at low FPR, not just AUC.** Confidently exposing 1% of your users is a leak, even at AUC 0.51 (Carlini et al., 2022).
 - **A balanced audit set.** Equal members and non-members, so chance is exactly AUC 0.5 and advantage means something.
@@ -192,30 +223,37 @@ The audit set is balanced, so chance is exactly AUC 0.5. Risk is the worst grade
 - **The worst attack sets the risk.** One attack that works is enough to leak.
 - **No deep learning dependency.** PyTorch, JAX and others plug in through `predict_proba` and `model_factory`, so the core stays NumPy, SciPy and scikit-learn.
 
-## Limits
+## Limitations
 
 - A low score means these attacks failed, not that the model is private. Only differential privacy gives worst-case guarantees.
 - LiRA's reference models train on half the audit pool (up to 2,000 rows by default), not your full training set. On large datasets, raise `max_samples` so they behave more like your model.
-- LiRA retrains your model `n_reference` times. Cheap for classical ML; for large networks, lower it or skip it.
+- LiRA retrains your model `n_reference` times. That's cheap for classical ML. For large networks, lower it or skip LiRA.
 - Benchmarks use one seed, so small differences may be noise.
-- Classifiers and regressors only. Generative models are on the roadmap.
+- Membership inference only, on classifiers and regressors. Other leakage attacks and generative models are on the [roadmap](#roadmap).
+
+## Roadmap
+
+The goal is for trainleak to measure every well-established way a model leaks its training data, behind one call, with each attack tested against the results in its paper and graded with a clear risk level. Membership inference came first because it's the standard measure of leakage. The rest follows in this order:
+
+1. **More membership attacks.** Label-only attacks, which need only the predicted label.
+2. **Attribute inference.** Recovering a hidden field of a known person, such as income, from the model.
+3. **Training data extraction.** Pulling verbatim training text or images out of generative models.
+
+Alongside the attacks: adapters for more frameworks, starting with Hugging Face transformers, and a pytest plugin that fails a test when a model leaks.
+
+Out of scope: adversarial examples, model stealing and data poisoning. They are about model security, not training data leakage, and other toolkits cover them.
+
+Open work is tracked in [issues](https://github.com/nancypatel12/trainleak/issues).
 
 ## Contributing
 
-Good first issues: label-only attacks, XGBoost/LightGBM, a `pytest` plugin, a Hugging Face adapter. See the [issues](https://github.com/nancypatel12/trainleak/issues) and [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributions are welcome, and new attacks most of all.
 
-## Citation
+- **Adding an attack.** Open an issue first and link the paper. The steps are in [CONTRIBUTING.md](CONTRIBUTING.md#add-an-attack).
+- **Finding a first task.** Issues labeled [good first issue](https://github.com/nancypatel12/trainleak/labels/good%20first%20issue) are small and say where in the code to start.
+- **Reporting a bug.** Open an issue with the bug report form.
 
-Cite the attack papers above, and optionally:
-
-```bibtex
-@software{patel_trainleak_2026,
-  author = {Patel, Nancy},
-  title  = {trainleak: membership inference audits for machine learning models},
-  year   = {2026},
-  url    = {https://github.com/nancypatel12/trainleak}
-}
-```
+Setup steps and the pull request checklist are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

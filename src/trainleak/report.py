@@ -52,6 +52,15 @@ def text_summary(report: AuditReport) -> str:
     return "\n".join(lines)
 
 
+def _require_matplotlib() -> None:
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        raise ImportError(
+            "Plots and HTML reports need matplotlib. Install it with: pip install 'trainleak[plot]'"
+        ) from None
+
+
 def style_log_roc_axes(ax, lo: float) -> None:
     """Log-log ROC axes in the house style, with ticks read as percentages."""
     from matplotlib.ticker import FixedLocator, NullLocator
@@ -84,6 +93,7 @@ def plot_roc(report: AuditReport, ax=None):
 
     The strongest attack is drawn in the accent color, the rest in gray.
     """
+    _require_matplotlib()
     if ax is None:
         import matplotlib.pyplot as plt
 
@@ -113,6 +123,7 @@ def _roc_png_base64(report: AuditReport) -> str:
 
 
 def write_html(report: AuditReport, path: str) -> None:
+    _require_matplotlib()
     metric, train, test, _ = fit_metrics(report)
     rows = "".join(
         f"<tr><td>{html.escape(r.name)}</td><td>{r.auc:.3f}</td><td>{r.advantage:.3f}</td>"

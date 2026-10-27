@@ -168,6 +168,17 @@ def _sklearn_predict(model, X):
     return model.predict(X)
 
 
+def _as_targets(y, name: str) -> np.ndarray:
+    # A one-column frame (df[["price"]]) arrives as (n, 1), which would
+    # broadcast against (n,) predictions into an (n, n) matrix.
+    y = np.asarray(y)
+    if y.ndim == 2 and y.shape[1] == 1:
+        y = y[:, 0]
+    if y.ndim != 1:
+        raise ValueError(f"{name} must have one target per row, got shape {y.shape}")
+    return y
+
+
 def audit(
     model,
     X_train,
@@ -221,8 +232,8 @@ def audit(
     if attacks is None:
         attacks = ALL_ATTACKS if task == "classification" else ALL_REGRESSION_ATTACKS
 
-    X_train, y_train = np.asarray(X_train), np.asarray(y_train)
-    X_test, y_test = np.asarray(X_test), np.asarray(y_test)
+    X_train, y_train = np.asarray(X_train), _as_targets(y_train, "y_train")
+    X_test, y_test = np.asarray(X_test), _as_targets(y_test, "y_test")
     rng = np.random.default_rng(seed)
 
     # Balanced audit set: equal members and non-members, so accuracy and

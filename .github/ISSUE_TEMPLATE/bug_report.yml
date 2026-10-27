@@ -21,6 +21,6 @@ body:
     id: versions
     attributes:
       label: Versions
-      placeholder: "trainleak 0.1.0, Python 3.12, scikit-learn 1.5, macOS 15"
+      placeholder: "trainleak 0.2.0, Python 3.12, scikit-learn 1.5, macOS 15"
     validations:
       required: true
