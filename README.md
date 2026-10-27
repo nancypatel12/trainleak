@@ -108,6 +108,33 @@ report = audit(model, X_train, y_train, X_test, y_test, model_factory=make, n_re
 
 Already have a trained network you can't wrap? Pass `predict_proba=lambda model, X: ...` instead.
 
+### Regression
+
+Regressors leak too: members get smaller residuals. Pass `task="regression"` and trainleak runs the loss attack on squared error and LiRA on per-example residuals, and reports train/test MSE in place of accuracy.
+
+```python
+from sklearn.ensemble import RandomForestRegressor
+from trainleak import audit
+
+model = RandomForestRegressor().fit(X_train, y_train)
+report = audit(model, X_train, y_train, X_test, y_test, task="regression")
+print(report.summary())
+```
+
+```
+trainleak audit: RandomForestRegressor
+  members / non-members : 400 / 400
+  train mse / test mse  : 127.3 / 1124  (gap +996.6)
+
+  attack                AUC    adv  TPR@0.1%   TPR@1%  TPR@10%
+  loss                0.784  0.453     0.000    0.030    0.338
+  lira                0.849  0.568     0.092    0.150    0.502
+
+  risk: SEVERE  (strongest attack: lira)
+```
+
+Anything with `predict` works; for other frameworks pass `predict=lambda model, X: ...`.
+
 ### Gate releases in CI
 
 ```python
@@ -153,6 +180,8 @@ Strongest of five attacks, 16 LiRA reference models, 50/50 splits, one seed. Rep
 | `modified_entropy` | Entropy that penalizes confident *wrong* predictions (Song & Mittal, 2021) | free |
 | `lira` | Train *N* reference models on random halves, fit per-example Gaussians to logit-scaled confidence IN vs OUT, score by likelihood ratio (Carlini et al., 2022) | *N* fits |
 
+For regression (`task="regression"`), `loss` is negative squared error and `lira` fits its Gaussians to the signed residual `y - prediction` instead of logit-scaled confidence. Entropy and confidence attacks need class probabilities and do not apply.
+
 The audit set is balanced, so chance is exactly AUC 0.5. Risk is the worst grade any attack earns: **severe** at AUC ≥ 0.80 or TPR@1%FPR ≥ 20%, **high** at 0.65 / 5%, **moderate** at 0.55 / 2%, else **low**. Conservative heuristics, not guarantees.
 
 ## Decisions
@@ -169,11 +198,11 @@ The audit set is balanced, so chance is exactly AUC 0.5. Risk is the worst grade
 - LiRA's reference models train on half the audit pool (up to 2,000 rows by default), not your full training set. On large datasets, raise `max_samples` so they behave more like your model.
 - LiRA retrains your model `n_reference` times. Cheap for classical ML; for large networks, lower it or skip it.
 - Benchmarks use one seed, so small differences may be noise.
-- Classifiers only, for now. Regression and generative models are on the roadmap.
+- Classifiers and regressors only. Generative models are on the roadmap.
 
 ## Contributing
 
-Good first issues: label-only attacks, XGBoost/LightGBM, regression audits, a `pytest` plugin, a Hugging Face adapter. See the [issues](https://github.com/nancypatel12/trainleak/issues) and [CONTRIBUTING.md](CONTRIBUTING.md).
+Good first issues: label-only attacks, XGBoost/LightGBM, a `pytest` plugin, a Hugging Face adapter. See the [issues](https://github.com/nancypatel12/trainleak/issues) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Citation
 

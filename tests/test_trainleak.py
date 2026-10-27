@@ -2,13 +2,13 @@ import json
 
 import numpy as np
 import pytest
-from sklearn.datasets import make_classification
-from sklearn.linear_model import LogisticRegression
+from sklearn.datasets import make_classification, make_regression
+from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 from trainleak import ALL_ATTACKS, audit
-from trainleak.attacks import entropy_score, logit_scale, loss_score, modified_entropy_score
+from trainleak.attacks import entropy_score, logit_scale, loss_score, modified_entropy_score, squared_error_score
 from trainleak.metrics import evaluate_attack, tpr_at_fpr
 
 
@@ -127,3 +127,84 @@ def test_string_labels_and_unknown_attack(data):
     assert list(report.results) == ["loss"]
     with pytest.raises(ValueError, match="Unknown attack"):
         audit(model, X_tr, names[y_tr], X_te, names[y_te], attacks=["nope"])
+
+
+@pytest.fixture(scope="module")
+def regression_data():
+    X, y = make_regression(n_samples=800, n_features=20, n_informative=5, noise=10.0, random_state=0)
+    return train_test_split(X, y, test_size=0.5, random_state=0)
+
+
+def test_squared_error_score_prefers_small_residuals():
+    preds = np.array([1.0, 1.0, 1.0])
+    targets = np.array([1.0, 1.5, 3.0])
+    s = squared_error_score(preds, targets)
+    assert s[0] > s[1] > s[2]
+
+
+def test_overfit_regressor_leaks_and_ridge_does_not(regression_data):
+    X_tr, X_te, y_tr, y_te = regression_data
+    overfit = DecisionTreeRegressor(random_state=0).fit(X_tr, y_tr)
+    ridge = Ridge(alpha=1.0).fit(X_tr, y_tr)
+    r_over = audit(overfit, X_tr, y_tr, X_te, y_te, task="regression", n_reference=8)
+    r_ridge = audit(ridge, X_tr, y_tr, X_te, y_te, task="regression", n_reference=8)
+
+    assert set(r_over.results) == {"loss", "lira"}
+    assert r_over.results["loss"].auc > 0.6
+    assert r_over.results["lira"].auc > 0.6
+    assert r_over.risk in ("high", "severe")
+    assert r_ridge.strongest.auc < 0.6
+
+
+def test_regression_report_uses_mse(regression_data, tmp_path):
+    X_tr, X_te, y_tr, y_te = regression_data
+    model = DecisionTreeRegressor(random_state=0).fit(X_tr, y_tr)
+    report = audit(model, X_tr, y_tr, X_te, y_te, task="regression", n_reference=4, max_samples=200)
+
+    assert report.task == "regression"
+    assert report.train_accuracy is None and report.train_mse < report.test_mse
+    assert report.generalization_gap == pytest.approx(report.test_mse - report.train_mse)
+
+    d = json.loads(report.to_json())
+    assert d["task"] == "regression" and "train_mse" in d and "train_accuracy" not in d
+    assert "train mse / test mse" in report.summary()
+
+    report.to_html(str(tmp_path / "r.html"))
+    assert "train mse" in (tmp_path / "r.html").read_text()
+
+
+def test_regression_rejects_classifier_attacks_and_bad_task(regression_data):
+    X_tr, X_te, y_tr, y_te = regression_data
+    model = Ridge().fit(X_tr, y_tr)
+    with pytest.raises(ValueError, match="Unknown attack 'entropy' for task 'regression'"):
+        audit(model, X_tr, y_tr, X_te, y_te, task="regression", attacks=["entropy"])
+    with pytest.raises(ValueError, match="Unknown task"):
+        audit(model, X_tr, y_tr, X_te, y_te, task="ranking")
+
+
+def test_custom_predict_for_regression(regression_data):
+    X_tr, X_te, y_tr, y_te = regression_data
+
+    class Wrapped:  # e.g. a PyTorch module behind a small adapter
+        def __init__(self, inner):
+            self.inner = inner
+
+    class FittableWrapped(Wrapped):
+        def fit(self, X, y):
+            self.inner.fit(X, y)
+            return self
+
+    inner = DecisionTreeRegressor(random_state=0).fit(X_tr, y_tr)
+    report = audit(
+        Wrapped(inner),
+        X_tr,
+        y_tr,
+        X_te,
+        y_te,
+        task="regression",
+        predict=lambda m, X: m.inner.predict(X).reshape(-1, 1).astype(np.float32),
+        model_factory=lambda: FittableWrapped(DecisionTreeRegressor(random_state=0)),
+        n_reference=4,
+    )
+    assert report.results["loss"].auc > 0.6
+    assert report.results["lira"].auc > 0.6

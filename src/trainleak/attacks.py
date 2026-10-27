@@ -23,6 +23,9 @@ from scipy.stats import norm
 EPS = 1e-12
 
 ProbaFn = Callable[[object, np.ndarray], np.ndarray]
+PredictFn = Callable[[object, np.ndarray], np.ndarray]
+# LiRA statistic: one roughly Gaussian number per example from a fitted model.
+StatisticFn = Callable[[object, np.ndarray, np.ndarray], np.ndarray]
 
 
 def true_class_prob(probs: np.ndarray, labels: np.ndarray) -> np.ndarray:
@@ -61,6 +64,15 @@ def modified_entropy_score(probs: np.ndarray, labels: np.ndarray) -> np.ndarray:
     return term_true + others.sum(axis=1)
 
 
+def squared_error_score(preds: np.ndarray, targets: np.ndarray) -> np.ndarray:
+    """Negative squared error, the regression analogue of the loss attack.
+
+    A regressor fits its own training rows more closely than unseen ones,
+    so members have smaller residuals (Yeom et al. 2018).
+    """
+    return -((preds - targets) ** 2)
+
+
 def logit_scale(p: np.ndarray) -> np.ndarray:
     """log(p / (1 - p)): makes confidences approximately Gaussian (LiRA)."""
     p = np.clip(p, EPS, 1.0 - EPS)
@@ -74,13 +86,40 @@ SIMPLE_ATTACKS: dict[str, Callable[[np.ndarray, np.ndarray], np.ndarray]] = {
     "modified_entropy": modified_entropy_score,
 }
 
+REGRESSION_ATTACKS: dict[str, Callable[[np.ndarray, np.ndarray], np.ndarray]] = {
+    "loss": squared_error_score,
+}
+
+
+def classification_statistic(predict_proba: ProbaFn) -> StatisticFn:
+    """LiRA statistic for classifiers: logit-scaled confidence in the true label."""
+
+    def fn(model, X, y):
+        return logit_scale(true_class_prob(predict_proba(model, X), y))
+
+    return fn
+
+
+def regression_statistic(predict: PredictFn) -> StatisticFn:
+    """LiRA statistic for regressors: the signed residual ``y - prediction``.
+
+    Reference models fit their own rows tightly, so IN residuals sit in a
+    narrower band around zero than OUT residuals. The likelihood ratio
+    scores how much better the target model's residual fits the IN band.
+    """
+
+    def fn(model, X, y):
+        return y - predict(model, X)
+
+    return fn
+
 
 def lira_scores(
     model_factory: Callable[[], object],
-    predict_proba: ProbaFn,
+    statistic: StatisticFn,
     X: np.ndarray,
     y: np.ndarray,
-    target_true_prob: np.ndarray,
+    target_statistic: np.ndarray,
     *,
     n_reference: int = 16,
     fixed_variance: bool = True,
@@ -91,12 +130,13 @@ def lira_scores(
 
     Trains ``n_reference`` reference models, each on a random half of the
     audit pool, so every example is IN for roughly half of them and OUT for
-    the rest. For each example we fit a Gaussian to the logit-scaled
-    confidence of IN models and of OUT models, then score the target model's
-    confidence by the log likelihood ratio between the two.
+    the rest. For each example we fit a Gaussian to ``statistic`` of the IN
+    models and of the OUT models, then score ``target_statistic`` (the same
+    quantity from the model under audit) by the log likelihood ratio.
 
-    ``predict_proba(model, X)`` must return probabilities whose columns are
-    aligned to the label encoding of ``y`` (0..n_classes-1).
+    ``statistic(model, X, y)`` returns one number per example that is
+    roughly Gaussian across reference models: see ``classification_statistic``
+    (logit-scaled confidence) and ``regression_statistic`` (residual).
     """
     n = len(X)
     rng = np.random.default_rng(seed)
@@ -107,7 +147,7 @@ def lira_scores(
         idx = rng.random(n) < 0.5
         model = model_factory()
         model.fit(X[idx], y[idx])
-        phis[k] = logit_scale(true_class_prob(predict_proba(model, X), y))
+        phis[k] = statistic(model, X, y)
         in_mask[k] = idx
         if progress:
             progress(k + 1, n_reference)
@@ -130,5 +170,4 @@ def lira_scores(
     sd_in = np.maximum(sd_in, 1e-3)
     sd_out = np.maximum(sd_out, 1e-3)
 
-    target_phi = logit_scale(target_true_prob)
-    return norm.logpdf(target_phi, mu_in, sd_in) - norm.logpdf(target_phi, mu_out, sd_out)
+    return norm.logpdf(target_statistic, mu_in, sd_in) - norm.logpdf(target_statistic, mu_out, sd_out)

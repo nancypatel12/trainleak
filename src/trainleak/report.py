@@ -22,12 +22,23 @@ INK, MUTED, LINE, ACCENT = "#000000", "#888888", "#e6e6e6", "#3a4fbf"
 GRAYS = ("#9a9aa3", "#cfcfd6")
 
 
+def fit_metrics(report: AuditReport) -> tuple[str, str, str, str]:
+    """(metric name, train, test, gap) formatted for display.
+
+    Accuracy for classifiers; MSE for regressors, which has no fixed scale
+    and so keeps significant digits rather than decimal places.
+    """
+    if report.task == "regression":
+        return "mse", f"{report.train_mse:.4g}", f"{report.test_mse:.4g}", f"{report.generalization_gap:+.4g}"
+    return "acc", f"{report.train_accuracy:.3f}", f"{report.test_accuracy:.3f}", f"{report.generalization_gap:+.3f}"
+
+
 def text_summary(report: AuditReport) -> str:
+    metric, train, test, gap = fit_metrics(report)
     lines = [
         f"trainleak audit: {report.model_name}",
         f"  members / non-members : {int(report.is_member.sum())} / {int((1 - report.is_member).sum())}",
-        f"  train acc / test acc  : {report.train_accuracy:.3f} / {report.test_accuracy:.3f}"
-        f"  (gap {report.generalization_gap:+.3f})",
+        f"  train {metric} / test {metric}  : {train} / {test}  (gap {gap})",
         "",
         f"  {'attack':<18}{'AUC':>7}{'adv':>7}{'TPR@0.1%':>10}{'TPR@1%':>9}{'TPR@10%':>9}",
     ]
@@ -102,6 +113,7 @@ def _roc_png_base64(report: AuditReport) -> str:
 
 
 def write_html(report: AuditReport, path: str) -> None:
+    metric, train, test, _ = fit_metrics(report)
     rows = "".join(
         f"<tr><td>{html.escape(r.name)}</td><td>{r.auc:.3f}</td><td>{r.advantage:.3f}</td>"
         f"<td>{r.tpr_at[0.001]:.3f}</td><td>{r.tpr_at[0.01]:.3f}</td><td>{r.tpr_at[0.1]:.3f}</td></tr>"
@@ -122,8 +134,8 @@ img{{max-width:100%}}
 </style></head><body>
 <h1>Membership inference audit</h1>
 <p class="muted">{html.escape(report.model_name)} &middot; {int(report.is_member.sum())} members vs
-{int((1 - report.is_member).sum())} non-members &middot; train acc {report.train_accuracy:.3f},
-test acc {report.test_accuracy:.3f}</p>
+{int((1 - report.is_member).sum())} non-members &middot; train {metric} {train},
+test {metric} {test}</p>
 <p class="risk">Risk: {report.risk}</p>
 <p>{html.escape(RISK_ADVICE[report.risk])}</p>
 <table><thead><tr><th>Attack</th><th>AUC</th><th>Advantage</th><th>TPR@0.1%FPR</th><th>TPR@1%FPR</th><th>TPR@10%FPR</th></tr></thead>

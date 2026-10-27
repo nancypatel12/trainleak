@@ -10,10 +10,20 @@ from typing import Callable
 
 import numpy as np
 
-from .attacks import SIMPLE_ATTACKS, lira_scores, true_class_prob
+from .attacks import (
+    REGRESSION_ATTACKS,
+    SIMPLE_ATTACKS,
+    classification_statistic,
+    lira_scores,
+    logit_scale,
+    regression_statistic,
+    true_class_prob,
+)
 from .metrics import AttackResult, evaluate_attack
 
 ALL_ATTACKS = (*SIMPLE_ATTACKS, "lira")
+ALL_REGRESSION_ATTACKS = (*REGRESSION_ATTACKS, "lira")
+TASKS = ("classification", "regression")
 
 RISK_LEVELS = ("low", "moderate", "high", "severe")
 
@@ -38,12 +48,22 @@ class AuditReport:
     results: dict[str, AttackResult]
     is_member: np.ndarray
     member_index: np.ndarray
-    train_accuracy: float
-    test_accuracy: float
+    train_accuracy: float | None
+    test_accuracy: float | None
     model_name: str = "model"
+    task: str = "classification"
+    train_mse: float | None = None
+    test_mse: float | None = None
 
     @property
     def generalization_gap(self) -> float:
+        """Train/test fit gap; positive means the model fits members better.
+
+        Accuracy difference for classifiers, MSE difference (test minus
+        train) for regressors.
+        """
+        if self.task == "regression":
+            return self.test_mse - self.train_mse
         return self.train_accuracy - self.test_accuracy
 
     @property
@@ -69,13 +89,25 @@ class AuditReport:
         return text_summary(self)
 
     def to_dict(self) -> dict:
+        if self.task == "regression":
+            # MSE lives on the target's scale, so it is not rounded.
+            fit = {
+                "train_mse": self.train_mse,
+                "test_mse": self.test_mse,
+                "generalization_gap": self.generalization_gap,
+            }
+        else:
+            fit = {
+                "train_accuracy": round(self.train_accuracy, 4),
+                "test_accuracy": round(self.test_accuracy, 4),
+                "generalization_gap": round(self.generalization_gap, 4),
+            }
         return {
             "model": self.model_name,
+            "task": self.task,
             "risk": self.risk,
             "strongest_attack": self.strongest.name,
-            "train_accuracy": round(self.train_accuracy, 4),
-            "test_accuracy": round(self.test_accuracy, 4),
-            "generalization_gap": round(self.generalization_gap, 4),
+            **fit,
             "n_members": int(self.is_member.sum()),
             "n_nonmembers": int((1 - self.is_member).sum()),
             "attacks": {name: r.to_dict() for name, r in self.results.items()},
@@ -132,6 +164,10 @@ def _default_factory(model) -> Callable[[], object] | None:
     return lambda: clone(model)
 
 
+def _sklearn_predict(model, X):
+    return model.predict(X)
+
+
 def audit(
     model,
     X_train,
@@ -139,8 +175,10 @@ def audit(
     X_test,
     y_test,
     *,
-    attacks: Sequence[str] = ALL_ATTACKS,
+    task: str = "classification",
+    attacks: Sequence[str] | None = None,
     predict_proba: Callable[[object, np.ndarray], np.ndarray] | None = None,
+    predict: Callable[[object, np.ndarray], np.ndarray] | None = None,
     model_factory: Callable[[], object] | None = None,
     n_reference: int = 16,
     max_samples: int = 2000,
@@ -152,44 +190,40 @@ def audit(
     Parameters
     ----------
     model
-        A *fitted* classifier. Anything with ``predict_proba`` works; for
-        other frameworks (PyTorch, JAX, ...) pass ``predict_proba``.
+        A *fitted* model. Classifiers need ``predict_proba`` and regressors
+        ``predict``; for other frameworks (PyTorch, JAX, ...) pass the
+        matching callable below.
     X_train, y_train
         The data the model was trained on (the "members").
     X_test, y_test
         Held-out data from the same distribution (the "non-members").
+    task
+        ``"classification"`` (default) or ``"regression"``. Regression runs
+        the ``loss`` attack on squared error and LiRA on residuals.
     attacks
         Which attacks to run. ``"lira"`` retrains ``n_reference`` copies of
-        the model, so it is the slowest and the strongest.
+        the model, so it is the slowest and the strongest. Defaults to every
+        attack that applies to ``task``.
     predict_proba
-        ``fn(model, X) -> probs`` with one column per class, in sorted label
-        order. Defaults to ``model.predict_proba``.
+        Classification only: ``fn(model, X) -> probs`` with one column per
+        class, in sorted label order. Defaults to ``model.predict_proba``.
+    predict
+        Regression only: ``fn(model, X) -> predictions`` with one value per
+        row. Defaults to ``model.predict``.
     model_factory
         ``fn() -> unfitted model`` used by LiRA. Defaults to
         ``sklearn.base.clone(model)`` when possible.
     max_samples
         Cap on members and on non-members used for the audit (each).
     """
+    if task not in TASKS:
+        raise ValueError(f"Unknown task {task!r}. Choose from {TASKS}.")
+    if attacks is None:
+        attacks = ALL_ATTACKS if task == "classification" else ALL_REGRESSION_ATTACKS
+
     X_train, y_train = np.asarray(X_train), np.asarray(y_train)
     X_test, y_test = np.asarray(X_test), np.asarray(y_test)
     rng = np.random.default_rng(seed)
-
-    classes = np.unique(np.concatenate([y_train, y_test]))
-    raw_proba = predict_proba or _sklearn_proba(classes)
-    # LiRA trains reference models on encoded labels 0..k-1, not on the
-    # original ones, so their columns align to those codes.
-    raw_ref_proba = predict_proba or _sklearn_proba(np.arange(len(classes)))
-
-    # float32 outputs (PyTorch, JAX) round 1 - 1e-12 to 1.0, which turns
-    # clipped logs into -inf and silently breaks LiRA.
-    def proba(m, X):
-        return np.asarray(raw_proba(m, X), dtype=np.float64)
-
-    def ref_proba(m, X):
-        return np.asarray(raw_ref_proba(m, X), dtype=np.float64)
-
-    enc_train = np.searchsorted(classes, y_train)
-    enc_test = np.searchsorted(classes, y_test)
 
     # Balanced audit set: equal members and non-members, so accuracy and
     # advantage are meaningful and chance AUC is exactly 0.5.
@@ -197,20 +231,63 @@ def audit(
     mem_idx = rng.choice(len(X_train), n, replace=False)
     non_idx = rng.choice(len(X_test), n, replace=False)
     X = np.concatenate([X_train[mem_idx], X_test[non_idx]])
-    y = np.concatenate([enc_train[mem_idx], enc_test[non_idx]])
     is_member = np.concatenate([np.ones(n, dtype=int), np.zeros(n, dtype=int)])
+    members, nonmembers = is_member == 1, is_member == 0
 
-    probs = proba(model, X)
-    if probs.shape != (len(X), len(classes)):
-        raise ValueError(f"predict_proba returned shape {probs.shape}, expected {(len(X), len(classes))}")
-    preds = probs.argmax(axis=1)
-    train_acc = float((preds[is_member == 1] == y[is_member == 1]).mean())
-    test_acc = float((preds[is_member == 0] == y[is_member == 0]).mean())
+    train_acc = test_acc = train_mse = test_mse = None
+    if task == "classification":
+        classes = np.unique(np.concatenate([y_train, y_test]))
+        raw_proba = predict_proba or _sklearn_proba(classes)
+        # LiRA trains reference models on encoded labels 0..k-1, not on the
+        # original ones, so their columns align to those codes.
+        raw_ref_proba = predict_proba or _sklearn_proba(np.arange(len(classes)))
+
+        # float32 outputs (PyTorch, JAX) round 1 - 1e-12 to 1.0, which turns
+        # clipped logs into -inf and silently breaks LiRA.
+        def proba(m, X):
+            return np.asarray(raw_proba(m, X), dtype=np.float64)
+
+        def ref_proba(m, X):
+            return np.asarray(raw_ref_proba(m, X), dtype=np.float64)
+
+        enc_train = np.searchsorted(classes, y_train)
+        enc_test = np.searchsorted(classes, y_test)
+        y = np.concatenate([enc_train[mem_idx], enc_test[non_idx]])
+
+        outputs = proba(model, X)
+        if outputs.shape != (len(X), len(classes)):
+            raise ValueError(f"predict_proba returned shape {outputs.shape}, expected {(len(X), len(classes))}")
+        preds = outputs.argmax(axis=1)
+        train_acc = float((preds[members] == y[members]).mean())
+        test_acc = float((preds[nonmembers] == y[nonmembers]).mean())
+
+        simple_attacks = SIMPLE_ATTACKS
+        statistic = classification_statistic(ref_proba)
+        target_statistic = logit_scale(true_class_prob(outputs, y))
+    else:
+        raw_predict = predict or _sklearn_predict
+
+        def predict_fn(m, X):
+            out = np.asarray(raw_predict(m, X), dtype=np.float64)
+            if out.ndim == 2 and out.shape[1] == 1:
+                out = out[:, 0]
+            if out.shape != (len(X),):
+                raise ValueError(f"predict returned shape {out.shape}, expected {(len(X),)}")
+            return out
+
+        y = np.concatenate([y_train[mem_idx], y_test[non_idx]]).astype(np.float64)
+        outputs = predict_fn(model, X)
+        train_mse = float(((outputs[members] - y[members]) ** 2).mean())
+        test_mse = float(((outputs[nonmembers] - y[nonmembers]) ** 2).mean())
+
+        simple_attacks = REGRESSION_ATTACKS
+        statistic = regression_statistic(predict_fn)
+        target_statistic = statistic(model, X, y)
 
     results: dict[str, AttackResult] = {}
     for name in attacks:
-        if name in SIMPLE_ATTACKS:
-            scores = SIMPLE_ATTACKS[name](probs, y)
+        if name in simple_attacks:
+            scores = simple_attacks[name](outputs, y)
         elif name == "lira":
             factory = model_factory or _default_factory(model)
             if factory is None:
@@ -226,10 +303,10 @@ def audit(
 
             scores = lira_scores(
                 factory,
-                ref_proba,
+                statistic,
                 X,
                 y,
-                true_class_prob(probs, y),
+                target_statistic,
                 n_reference=n_reference,
                 seed=seed,
                 progress=progress,
@@ -237,7 +314,8 @@ def audit(
             if verbose:
                 print()
         else:
-            raise ValueError(f"Unknown attack {name!r}. Choose from {ALL_ATTACKS}.")
+            available = ALL_ATTACKS if task == "classification" else ALL_REGRESSION_ATTACKS
+            raise ValueError(f"Unknown attack {name!r} for task {task!r}. Choose from {available}.")
         results[name] = evaluate_attack(name, scores, is_member)
 
     return AuditReport(
@@ -247,4 +325,7 @@ def audit(
         train_accuracy=train_acc,
         test_accuracy=test_acc,
         model_name=type(model).__name__,
+        task=task,
+        train_mse=train_mse,
+        test_mse=test_mse,
     )
