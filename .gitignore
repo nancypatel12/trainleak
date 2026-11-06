@@ -6,3 +6,4 @@ dist/
 .ruff_cache/
 *.html
 .DS_Store
+benchmarks/data/

@@ -1,0 +1,74 @@
+{
+  "config": {
+    "members": 10000,
+    "non_members": 10000,
+    "n_reference": 16,
+    "epochs": 30,
+    "seed": 0,
+    "smoke": false
+  },
+  "hardware": {
+    "device": "cuda",
+    "gpu": "NVIDIA GeForce GTX 1080 Ti",
+    "torch": "2.13.0+cu126"
+  },
+  "train_accuracy": 0.8776,
+  "test_accuracy": 0.7951,
+  "attacks": {
+    "loss": {
+      "auc": 0.5452,
+      "advantage": 0.0897,
+      "accuracy": 0.5449,
+      "tpr_at_fpr": {
+        "0.001": 0.0011,
+        "0.01": 0.0101,
+        "0.1": 0.1043
+      }
+    },
+    "confidence": {
+      "auc": 0.5452,
+      "advantage": 0.0897,
+      "accuracy": 0.5449,
+      "tpr_at_fpr": {
+        "0.001": 0.0011,
+        "0.01": 0.0101,
+        "0.1": 0.1043
+      }
+    },
+    "entropy": {
+      "auc": 0.5249,
+      "advantage": 0.0429,
+      "accuracy": 0.5214,
+      "tpr_at_fpr": {
+        "0.001": 0.0011,
+        "0.01": 0.0103,
+        "0.1": 0.1042
+      }
+    },
+    "modified_entropy": {
+      "auc": 0.5458,
+      "advantage": 0.0913,
+      "accuracy": 0.5456,
+      "tpr_at_fpr": {
+        "0.001": 0.0012,
+        "0.01": 0.0104,
+        "0.1": 0.1054
+      }
+    },
+    "lira": {
+      "auc": 0.6332,
+      "advantage": 0.1852,
+      "accuracy": 0.5926,
+      "tpr_at_fpr": {
+        "0.001": 0.0127,
+        "0.01": 0.0471,
+        "0.1": 0.2082
+      }
+    }
+  },
+  "risk": "moderate",
+  "seconds": {
+    "target": 58,
+    "total": 945
+  }
+}

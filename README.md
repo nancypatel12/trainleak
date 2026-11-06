@@ -215,6 +215,21 @@ The benchmarks audit five classifiers on three datasets: 15 models, 16 LiRA refe
 
 All 15 results: [`benchmarks/results.md`](benchmarks/results.md). Reproduce them with `python benchmarks/run_benchmarks.py` (2 minutes on an M3 Pro CPU).
 
+### Does it work on a neural network?
+
+The same `audit` call, on a PyTorch CNN trained on CIFAR-10, the dataset of the LiRA paper. The model trains on 10,000 images and is audited against 10,000 it never saw, both drawn at random from the CIFAR-10 training set. LiRA trains 16 reference CNNs of its own. One seed; 16 minutes on one GTX 1080 Ti.
+
+| CIFAR-10 | Model | Test acc | AUC | TPR@0.1%FPR | TPR@1%FPR |
+|---|---|---:|---:|---:|---:|
+| Loss attack | Small CNN (1.2M parameters) | 0.795 | 0.545 | 0.1% | 1.0% |
+| **LiRA, trainleak (16 reference models)** | Small CNN (1.2M parameters) | 0.795 | 0.633 | **1.3%** | 4.7% |
+| Loss attack, paper | Wide ResNet | about 0.92 | — | 0.0% | — |
+| LiRA, paper, one query per image (256 shadow models) | Wide ResNet | about 0.92 | — | 5.6% | — |
+
+TPR@0.1%FPR is the share of training images an attack finds while wrongly flagging 0.1% of unseen ones; higher means more leakage. Paper rows are from Carlini et al. (2022), Tables I and II; the paper reports no AUC for them, so those cells are empty.
+
+LiRA finds about 12× more training images than the loss attack at 0.1% FPR, the same pattern the paper reports. It finds fewer than the paper's 5.6%, as expected: 16 reference models instead of 256 (the paper shows the attack weakens quickly below 64), a smaller model, and a smaller training set. At 0.1% FPR the rate rests on 10 false positives among 10,000 images, so treat it as a rough number. Reproduce with `pip install torch` and `python benchmarks/cifar10_lira.py` (about 16 minutes on one GPU; `--smoke` checks the setup in seconds).
+
 ## Design decisions
 
 - **TPR at low FPR, not just AUC.** Confidently exposing 1% of your users is a leak, even at AUC 0.51 (Carlini et al., 2022).
